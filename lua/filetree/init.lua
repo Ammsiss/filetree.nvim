@@ -25,7 +25,7 @@ vim.api.nvim_create_user_command("Filetree", function()
 
     lib.refresh()
     require("filetree.keymaps") -- x buf keymaps
-    require("filetree.command") -- x buf cmds
+    require("filetree.autocmd") -- x buf cmds
 end, {})
 
 vim.keymap.set("n", "<leader>ot", ":Filetree<CR>",
