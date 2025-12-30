@@ -20,7 +20,7 @@ function M.print_to_buffer(output)
     local modified_output = {}
     for _, line in ipairs(output.lines) do
 
-        if hidden then
+        if M.hidden then
             if line.dotfile then
                 goto continue
             end
