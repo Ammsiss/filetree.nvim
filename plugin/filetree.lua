@@ -1,3 +1,5 @@
+vim.opt.rtp:prepend("/home/ammsiss/Projects/filetree.nvim")
+
 require("filetree")
 
 -- local function add_git_data(output)
