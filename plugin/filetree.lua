@@ -2,6 +2,8 @@ vim.opt.rtp:prepend("/home/ammsiss/Projects/filetree.nvim")
 
 require("filetree")
 
+-- Hello!
+
 -- local function add_git_data(output)
 --
 --     local result = vim.system({ "git", "status", "--porcelain", "--ignored" }, { text = true }):wait()
