@@ -424,6 +424,7 @@ vim.api.nvim_create_user_command("Filetree", function()
 
     local gb = require("custom.color").gruvbox
 
+    vim.api.nvim_set_hl(0, "TreeDirectoryIcon", { fg = gb.bright_blue })
     vim.api.nvim_set_hl(0, "TreeFileLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeDirLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeFifoIcon", { fg = gb.bright_yellow })
