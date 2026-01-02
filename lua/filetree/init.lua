@@ -4,10 +4,14 @@ local ignored = true
 
 local function add_icon_data(output)
     for _, line in ipairs(output.lines) do
-        if line.text:match(line.icon) then
-            local start_col, end_col = line.text:find(line.icon)
-            if start_col then
-                line.icon = { hl = line.hl, start_col = start_col, end_col = end_col }
+        if line.icon then
+            if line.text:match(line.icon) then
+                local start_col, end_col = line.text:find(line.icon)
+                if start_col then
+                    line.icon = {
+                        hl = line.hl, start_col = start_col, end_col = end_col
+                    }
+                end
             end
         end
     end
@@ -75,23 +79,29 @@ local function get_dir_content(dir)
         if line.type == "directory" then
             line.icon = ""
             line.hl = "TreeDirectoryIcon"
+        elseif line.type == "link" then
+            local stat_table = vim.uv.fs_stat(line.name)
+            assert(stat_table)
+
+            if stat_table.type == "directory" then
+                line.icon = ""
+                line.hl = "TreeDirLinkIcon"
+            else
+                line.icon = ""
+                line.hl = "TreeFileLinkIcon"
+            end
+        elseif line.type == "fifo" then
+            line.icon = "󰈲"
+            line.hl = "TreeFifoIcon"
         else
             line.icon, line.hl = require("nvim-web-devicons").get_icon(
                 name, nil, { default = true }
             )
         end
 
-        local str = ""
-        if line.type == "directory" then
-            str = str .. "  " .. name
-            line.path = line.path .. "/"
-            line.text = str
-            table.insert(directories, line)
-        elseif type == "file" then
-            str = str .. " " .. line.icon .. " " .. name
-            line.text = str
-            table.insert(files, line)
-        end
+        local str = " " .. line.icon .. " " .. name
+        line.text = str
+        table.insert(files, line)
 
         if name:sub(1, 1) == "." then
             line.dotfile = true
@@ -412,7 +422,11 @@ vim.api.nvim_create_user_command("Filetree", function()
         return
     end
 
-    vim.cmd("highlight TreeDirectoryIcon guifg=#83a598")
+    local gb = require("custom.color").gruvbox
+
+    vim.api.nvim_set_hl(0, "TreeFileLinkIcon", { fg = gb.bright_aqua })
+    vim.api.nvim_set_hl(0, "TreeDirLinkIcon", { fg = gb.bright_aqua })
+    vim.api.nvim_set_hl(0, "TreeFifoIcon", { fg = gb.bright_yellow })
 
     vim.cmd("split")
     vim.cmd("wincmd H")
