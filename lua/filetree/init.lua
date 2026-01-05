@@ -1,6 +1,5 @@
 local buf = { open = false }
 local hidden = false
-local ignored = true
 
 local function add_icon_data(output)
     for _, line in ipairs(output.lines) do
@@ -162,6 +161,8 @@ local function refresh()
     vim.bo[buf.num].modifiable = true
     print_to_buffer(output)
     vim.bo[buf.num].modifiable = false
+
+    vim.cmd("normal! gg")
 end
 
 local function define_mappings()
@@ -187,10 +188,6 @@ local function define_mappings()
             if refresh() == -1 then
                 vim.cmd("lcd ..")
             end
-        elseif line:sub(1, 1) == " " then
-            local wd = vim.fn.getcwd()
-            vim.cmd("close")
-            vim.cmd("e " .. wd .. "/" .. target)
         end
     end, { buffer = buf.num })
 
@@ -393,11 +390,6 @@ local function define_mappings()
         refresh()
     end, { buffer = buf.num, silent = true })
 
-    vim.keymap.set("n", "I", function()
-        ignored = not ignored
-        refresh()
-    end, { buffer = buf.num, silent = true })
-
     vim.keymap.set("n", "s", function()
         local line = vim.api.nvim_get_current_line()
         if line:sub(1, 1) ~= " " then
@@ -558,3 +550,9 @@ vim.keymap.set("n", "<leader>ot", ":Filetree<CR>", { noremap = true, silent = tr
 -- vim.cmd("highlight TreeGitUntracked guifg=#fb4934")
 -- vim.cmd("highlight TreeGitAdded guifg=#b8bb26")
 -- vim.cmd("highlight TreeGitIgnored guifg=#5c6370")
+--
+--
+-- vim.keymap.set("n", "I", function()
+--     ignored = not ignored
+--     refresh()
+-- end, { buffer = buf.num, silent = true })
