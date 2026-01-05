@@ -1,5 +1,6 @@
 local buf = { open = false }
 local hidden = false
+local current_data
 
 local function add_icon_data(output)
     for _, line in ipairs(output.lines) do
@@ -36,7 +37,7 @@ local function print_to_buffer(output)
 
     for i, line in ipairs(modified_output) do
 
-        local ns = vim.api.nvim_create_namespace("filetree-highlights")
+        local ns = vim.api.nvim_create_namespace("")
 
         if line.icon ~= nil then
             vim.hl.range(
@@ -63,7 +64,6 @@ local function get_dir_content(dir)
     end
 
     local output = { lines = {}, header = { text = cwd } }
-    local directories = {}
     local files = {}
 
     while true do
@@ -98,12 +98,15 @@ local function get_dir_content(dir)
             if stat_table == nil then
                 line.icon = ""
                 line.hl = "TreeBrokenLinkIcon"
+                line.type = "filelink"
             elseif stat_table.type == "directory" then
                 line.icon = ""
                 line.hl = "TreeDirLinkIcon"
+                line.type = "dirlink"
             else
                 line.icon = ""
                 line.hl = "TreeFileLinkIcon"
+                line.type = "filelink"
             end
         elseif line.type == "fifo" then
             line.icon = "󰈲"
@@ -135,12 +138,7 @@ local function get_dir_content(dir)
         end
     end
 
-    table.sort(directories, function(a, b) return a.name < b.name end)
     table.sort(files, function(a, b) return a.name < b.name end)
-
-    for _, line in ipairs(directories) do
-        table.insert(output.lines, line)
-    end
 
     for _, line in ipairs(files) do
         table.insert(output.lines, line)
@@ -151,41 +149,33 @@ end
 
 
 local function refresh()
-    local output = get_dir_content(vim.fn.getcwd())
-    if output == -1 then
+    current_data = get_dir_content(vim.fn.getcwd())
+    if current_data == -1 then
         return -1
     end
 
-    add_icon_data(output)
+    add_icon_data(current_data)
 
     vim.bo[buf.num].modifiable = true
-    print_to_buffer(output)
+    print_to_buffer(current_data)
     vim.bo[buf.num].modifiable = false
-
-    vim.cmd("normal! gg")
 end
 
 local function define_mappings()
-
     vim.keymap.set("n", "q", function()
         vim.cmd("close")
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "<C-i>", function()
-        local line = vim.api.nvim_get_current_line()
-
-        local target
-        pcall(function()
-            ---@diagnostic disable-next-line: param-type-mismatch
-            target = line:sub(vim.str_byteindex(line, 4, false))
-        end)
-        if not target then
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
             return
         end
+        local line = current_data.lines[row]
 
-        if line:match("") then
+        if line.type == "directory" or line.type == "dirlink" then
             local code = pcall(function()
-                vim.cmd("lcd " .. target)
+                vim.cmd("lcd " .. line.name)
             end)
             if not code then
                 vim.notify("Can't open that!", vim.log.levels.INFO)
@@ -204,133 +194,137 @@ local function define_mappings()
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "<Tab>", function()
-        local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
+            return
+        end
+        local line = current_data.lines[row]
 
-        if not line:match("") and line:sub(1, 1) == " " then
+        if line.type == "file" or line.type == "filelink" then
             local wd = vim.fn.getcwd()
             vim.cmd("wincmd l")
-            vim.cmd("e " .. wd .. "/" .. target)
+            vim.cmd("e " .. wd .. "/" .. line.name)
             vim.cmd("wincmd h")
         end
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "d", function()
-        local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
+            return
+        end
+        local line = current_data.lines[row]
 
-        local function delete(path, flag)
-            local return_code
-            if flag == nil then
-                return_code = vim.fn.delete(path)
+        local function delete(flag)
+            if vim.fn.delete(line.name, flag) == -1 then
+                vim.notify("Failed to delete!", vim.log.levels.WARN)
             else
-                return_code = vim.fn.delete(path, flag)
-            end
-
-            if return_code == -1 then
-                vim.api.nvim_echo({ { "Failed to delete!" } }, false, {})
-            else
-                vim.api.nvim_echo({ { path .. " successfully deleted!" } }, false, {})
+                vim.notify("Deleted successfully!", vim.log.levels.INFO)
+                refresh()
             end
         end
 
-        if line:sub(1, 1) == " " then
-            vim.ui.input({ prompt = "Delete " .. target .. " (y/N): " }, function(input)
-                if input == "y" then
-                    if vim.fn.empty(vim.fn.glob(target .. "/*")) == 0 then
-                        vim.ui.input({ prompt = "Directory has contents (y/N): " }, function(input2)
-                            if input2 == "y" then
-                                delete(target, "rf")
-                                vim.api.nvim_echo({ { target .. " successfully deleted" } }, false, {})
-                                refresh()
+        vim.ui.input({ prompt = "Delete " .. line.name .. " [y/N]: " }, function(input)
+            if input == "y" then
+                if line.type == "directory" then
+                    if vim.fn.delete(line.name, "d") == -1 then
+                        vim.ui.input(
+                            { prompt = "Are you sure? (directory has contents) [y/N]: " },
+                            function(input2)
+                                if input2 == "y" then
+                                    delete("rf")
+                                else
+                                    vim.notify("Aborting!", vim.log.levels.INFO)
+                                end
                             end
-                        end)
+                        )
                     else
-                        if vim.fn.isdirectory(target) == 1 then
-                            delete(target, "d")
-                        else
-                            delete(target)
-                        end
-
+                        vim.notify("Deleted successfully!", vim.log.levels.INFO)
                         refresh()
                     end
+                else
+                    delete("")
                 end
-            end)
-        end
+            else
+                vim.notify("Aborting!", vim.log.levels.INFO)
+            end
+        end)
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "a", function()
-        local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
-        local cwd
-
-        if line:match("") then
-            cwd = vim.fn.getcwd() .. "/" .. target .. "/"
+        local line = {}
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row ~= 0 then
+            line = current_data.lines[row]
         else
-            cwd = vim.fn.getcwd() .. "/"
+            line.type = "file" -- if header
         end
 
-        vim.ui.input({ prompt = "Create file ", default = cwd }, function(input)
+        local path_prefix
 
+        if line.type == "directory" then
+            path_prefix = vim.fn.getcwd() .. "/" .. line.name .. "/"
+        else
+            path_prefix = vim.fn.getcwd() .. "/"
+        end
+
+        vim.ui.input({ prompt = "Create file ", default = path_prefix }, function(input)
             if input == "" or input == nil then
-                vim.api.nvim_echo({ { "Aborted!" } }, false, {})
+                vim.notify("Aborted!", vim.log.levels.INFO)
+                return
+            end
+
+            if vim.fn.isdirectory(input) ~= 0 or vim.fn.filereadable(input) ~= 0 then
+                vim.notify("Path is taken!", vim.log.levels.INFO)
                 return
             end
 
             if input:sub(-1) == "/" then
-                if vim.fn.isdirectory(input) == 0 then
-                    if vim.fn.mkdir(input, "p") == 0 then
-                        vim.api.nvim_echo({ { "Failed to make directory!" } }, false, {})
-                    else
-                        vim.api.nvim_echo({ { "Successfully created directory!" } }, false, {})
-                    end
+                if vim.fn.mkdir(input, "p") ~= 0 then
+                    vim.notify("Successfully created directory!", vim.log.levels.INFO)
                 else
-                    vim.api.nvim_echo({ { "Directory/file already exists!" } }, false, {})
+                    vim.notify("Failed to create directory!", vim.log.levels.WARN)
                 end
             else
-                if vim.fn.filereadable(input) == 0 then
-                    if vim.fn.writefile({}, input) == -1 then
-                        vim.api.nvim_echo({ { "Failed to create file!" } }, false, {})
-                    else
-                        vim.api.nvim_echo({ { "Successfully created file!" } }, false, {})
-                    end
+                local success = pcall(function()
+                    vim.fn.writefile({}, input)
+                end)
+
+                if success then
+                    vim.notify("Created file!", vim.log.levels.INFO)
                 else
-                    vim.api.nvim_echo({ { "Directory/file already exists!" } }, false, {})
+                    vim.notify("Failed to create file!", vim.log.levels.WARN)
                 end
             end
-
             refresh()
         end)
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "r", function()
-        local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
-
-        if line:sub(1, 1) == " " then
-            vim.ui.input({ prompt = "Rename to: " }, function(input)
-
-                if input == nil then
-                    vim.api.nvim_echo({ { "Aborted!" } }, false, {})
-                    return
-                end
-
-                if vim.fn.filereadable(input) == 0 and vim.fn.isdirectory(input) == 0 then
-                    if vim.fn.rename(target, input) == 0 then
-                        vim.api.nvim_echo({ { "Success!" } }, false, {})
-                        refresh()
-                    else
-                        vim.api.nvim_echo({ { "Failed to rename!" } }, false, {})
-                    end
-                else
-                    vim.api.nvim_echo({ { "That already exists!" } }, false, {})
-                end
-            end)
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
+            return
         end
+        local line = current_data.lines[row]
+
+        vim.ui.input({ prompt = "Rename to: " }, function(input)
+            if input == "" or input == nil then
+                vim.notify("Aborted!", vim.log.levels.INFO)
+                return
+            end
+
+            if vim.fn.isdirectory(input) ~= 0 or vim.fn.filereadable(input) ~= 0 then
+                vim.notify("Path is taken!", vim.log.levels.INFO)
+                return
+            end
+
+            if vim.fn.rename(line.name, input) == 0 then
+                vim.notify("Successfully renamed!", vim.log.levels.INFO)
+                refresh()
+            else
+                vim.notify("Failed to rename!", vim.log.levels.INFO)
+            end
+        end)
     end, { buffer = buf.num })
 
     local copy = { name = "", from = "", type = "" }
