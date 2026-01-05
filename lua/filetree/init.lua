@@ -173,8 +173,15 @@ local function define_mappings()
 
     vim.keymap.set("n", "<C-i>", function()
         local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
+
+        local target
+        pcall(function()
+            ---@diagnostic disable-next-line: param-type-mismatch
+            target = line:sub(vim.str_byteindex(line, 4, false))
+        end)
+        if not target then
+            return
+        end
 
         if line:match("") then
             local code = pcall(function()
