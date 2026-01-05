@@ -71,6 +71,20 @@ local function get_dir_content(dir)
         local name, type = vim.uv.fs_scandir_next(scandir)
         if not name then break end
 
+        if not type then
+            local lsb = vim.uv.fs_lstat(name)
+            if not lsb then
+                local sb = vim.uv.fs_stat(name)
+                if not sb then
+                    type = "?"
+                else
+                    type = sb.type
+                end
+            else
+                type = lsb.type
+            end
+        end
+
         local line = {}
         line.name = name
         line.type = type
@@ -95,6 +109,18 @@ local function get_dir_content(dir)
         elseif line.type == "fifo" then
             line.icon = "󰈲"
             line.hl = "TreeFifoIcon"
+        elseif line.type == "socket" then
+            line.icon = "󰆨"
+            line.hl = "TreeSocketIcon"
+        elseif line.type == "char" then
+            line.icon = ""
+            line.hl = "TreeCharDevIcon"
+        elseif line.type == "block" then
+            line.icon = "󰜫"
+            line.hl = "TreeBlockDevIcon"
+        elseif line.type == "?" then
+            line.icon = "?"
+            line.hl = "TreeUnknownIcon"
         else
             line.icon, line.hl = require("nvim-web-devicons").get_icon(
                 name, nil, { default = true }
@@ -150,7 +176,14 @@ local function define_mappings()
         local target = line:sub(vim.str_byteindex(line, 4, false))
 
         if line:match("") then
-            vim.cmd("lcd " .. target)
+            local code = pcall(function()
+                vim.cmd("lcd " .. target)
+            end)
+            if not code then
+                vim.notify("Can't open that!", vim.log.levels.INFO)
+                return
+            end
+
             if refresh() == -1 then
                 vim.cmd("lcd ..")
             end
@@ -430,7 +463,11 @@ vim.api.nvim_create_user_command("Filetree", function()
     vim.api.nvim_set_hl(0, "TreeFileLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeDirLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeBrokenLinkIcon", { fg = gb.bright_red })
-    vim.api.nvim_set_hl(0, "TreeFifoIcon", { fg = gb.bright_yellow })
+    vim.api.nvim_set_hl(0, "TreeFifoIcon", { fg = gb.faded_yellow })
+    vim.api.nvim_set_hl(0, "TreeSocketIcon", { fg = gb.bright_purple })
+    vim.api.nvim_set_hl(0, "TreeCharDevIcon", { fg = gb.bright_yellow })
+    vim.api.nvim_set_hl(0, "TreeBlockDevIcon", { fg = gb.bright_yellow })
+    vim.api.nvim_set_hl(0, "TreeUnknownIcon", { fg = gb.gray })
 
     vim.cmd("split")
     vim.cmd("wincmd H")
