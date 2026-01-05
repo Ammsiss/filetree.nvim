@@ -81,9 +81,11 @@ local function get_dir_content(dir)
             line.hl = "TreeDirectoryIcon"
         elseif line.type == "link" then
             local stat_table = vim.uv.fs_stat(line.name)
-            assert(stat_table)
 
-            if stat_table.type == "directory" then
+            if stat_table == nil then
+                line.icon = ""
+                line.hl = "TreeBrokenLinkIcon"
+            elseif stat_table.type == "directory" then
                 line.icon = ""
                 line.hl = "TreeDirLinkIcon"
             else
@@ -427,6 +429,7 @@ vim.api.nvim_create_user_command("Filetree", function()
     vim.api.nvim_set_hl(0, "TreeDirectoryIcon", { fg = gb.bright_blue })
     vim.api.nvim_set_hl(0, "TreeFileLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeDirLinkIcon", { fg = gb.bright_aqua })
+    vim.api.nvim_set_hl(0, "TreeBrokenLinkIcon", { fg = gb.bright_red })
     vim.api.nvim_set_hl(0, "TreeFifoIcon", { fg = gb.bright_yellow })
 
     vim.cmd("split")
