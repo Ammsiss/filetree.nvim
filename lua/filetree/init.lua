@@ -1,5 +1,5 @@
 local buf = { open = false }
-local hidden = false
+local show_dots = false
 local current_data
 local augroup_name = "Filetree.nvim"
 
@@ -22,17 +22,8 @@ local function print_to_buffer(output)
     local lines = { output.header.text }
     local modified_output = {}
     for _, line in ipairs(output.lines) do
-
-        if hidden then
-            if line.dotfile then
-                goto continue
-            end
-        end
-
         table.insert(modified_output, line)
         table.insert(lines, line.text)
-
-        ::continue::
     end
     vim.api.nvim_buf_set_lines(buf.num, 0, -1, false, lines)
 
@@ -72,6 +63,10 @@ local function get_dir_content(dir)
     while true do
         local name, type = vim.uv.fs_scandir_next(scandir)
         if not name then break end
+
+        if not show_dots and name:sub(1, 1) == "." then
+            goto continue
+        end
 
         if not type then
             local lsb = vim.uv.fs_lstat(name)
@@ -139,6 +134,8 @@ local function get_dir_content(dir)
         if name:sub(1, 1) == "." then
             line.dotfile = true
         end
+
+        ::continue::
     end
 
     table.sort(files, function(a, b) return a.name < b.name end)
@@ -378,7 +375,7 @@ local function define_mappings()
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "H", function()
-        hidden = not hidden
+        show_dots = not show_dots
         refresh()
     end, { buffer = buf.num, silent = true })
 
