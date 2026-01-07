@@ -62,6 +62,8 @@ local function get_dir_content(dir)
     local user = vim.fn.getenv("USER")
     if cwd:find("/Users/" .. user) then
         cwd = cwd:gsub("^/Users/" .. user, "~")
+    elseif cwd:find("/home/" .. user) then
+        cwd = cwd:gsub("^/home/" .. user, "~")
     end
 
     local output = { lines = {}, header = { text = cwd } }
