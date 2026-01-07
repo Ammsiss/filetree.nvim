@@ -1,6 +1,7 @@
 local buf = { open = false }
 local hidden = false
 local current_data
+local augroup_name = "Filetree.nvim"
 
 local function add_icon_data(output)
     for _, line in ipairs(output.lines) do
@@ -163,7 +164,7 @@ end
 
 local function define_mappings()
     vim.keymap.set("n", "q", function()
-        vim.cmd("close")
+        vim.api.nvim_win_close(0, false)
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "<C-i>", function()
@@ -318,72 +319,60 @@ local function define_mappings()
                 return
             end
 
-            if vim.fn.rename(line.name, input) == 0 then
-                vim.notify("Successfully renamed!", vim.log.levels.INFO)
-                refresh()
-            else
-                vim.notify("Failed to rename!", vim.log.levels.INFO)
-            end
+            vim.system({ "mv", "-n", line.name, input }, {}):wait()
+            refresh()
         end)
     end, { buffer = buf.num })
 
     local copy = { name = "", from = "", type = "" }
 
     vim.keymap.set("n", "c", function()
-        local line = vim.api.nvim_get_current_line()
-
-        if line:sub(1, 1) == " " then
-            ---@diagnostic disable-next-line: param-type-mismatch
-            local file_name = line:sub(vim.str_byteindex(line, 4, false))
-            local path = vim.fn.getcwd() .. "/" .. file_name
-
-            copy.name = file_name
-            copy.from = path
-            copy.type = "copy"
-            vim.api.nvim_echo({ { "Copied " .. copy.from } }, false, {})
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
+            return
         end
+
+        local line = current_data.lines[row]
+        local path = vim.fn.getcwd() .. "/" .. line.name
+
+        copy.name = line.name
+        copy.from = path
+        copy.type = "copy"
+
+        vim.notify("Copied " .. copy.from, vim.log.levels.INFO)
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "x", function()
-        local line = vim.api.nvim_get_current_line()
-
-        if line:sub(1, 1) == " " then
-            ---@diagnostic disable-next-line: param-type-mismatch
-            local file_name = line:sub(vim.str_byteindex(line, 4, false))
-            local path = vim.fn.getcwd() .. "/" .. file_name
-
-            copy.name = file_name
-            copy.from = path
-            copy.type = "cut"
-            vim.api.nvim_echo({ { "Cut " .. copy.from } }, false, {})
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
+            return
         end
+
+        local line = current_data.lines[row]
+        local path = vim.fn.getcwd() .. "/" .. line.name
+
+        copy.name = line.name
+        copy.from = path
+        copy.type = "cut"
+
+        vim.notify("Cut " .. copy.from, vim.log.levels.INFO)
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "p", function()
-        local line = vim.api.nvim_get_current_line()
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
+        local dest = vim.fn.getcwd() .. "/" .. copy.name
 
-        local dest
-        if line:match("") then
-            dest = vim.fn.getcwd() .. "/" .. target .. "/" .. copy.name
-        else
-            dest = vim.fn.getcwd() .. "/" .. copy.name
+        if vim.fn.isdirectory(dest) ~= 0 or vim.fn.filereadable(dest) ~= 0 then
+            vim.notify("Path is taken!", vim.log.levels.INFO)
+            return
         end
 
         if copy.type == "copy" then
-            vim.fn.system({ "cp", "-R", copy.from, dest })
+            vim.system({ "cp", "-Rn", copy.from, dest }, {}):wait()
         elseif copy.type == "cut" then
-            if vim.fn.rename(copy.from, dest) == 0 then
-                vim.api.nvim_echo({ {"Successfully moved!" } }, false, {})
-            else
-                vim.api.nvim_echo({ { "Move failed!" } }, false, {})
-            end
+            vim.system({ "mv", "-n", copy.from, dest }, {}):wait()
         end
 
-        print("cp " .. copy.from .. " " .. dest)
         refresh()
-
     end, { buffer = buf.num })
 
     vim.keymap.set("n", "H", function()
@@ -392,14 +381,13 @@ local function define_mappings()
     end, { buffer = buf.num, silent = true })
 
     vim.keymap.set("n", "s", function()
-        local line = vim.api.nvim_get_current_line()
-        if line:sub(1, 1) ~= " " then
+        local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+        if row == 0 then
             return
         end
 
-        ---@diagnostic disable-next-line: param-type-mismatch
-        local target = line:sub(vim.str_byteindex(line, 4, false))
-        local path = vim.fn.getcwd() .. "/" .. target
+        local line = current_data.lines[row]
+        local path = vim.fn.getcwd() .. "/" .. line.name
 
         local open_cmd
         if vim.fn.has("macunix") == 1 then
@@ -407,8 +395,6 @@ local function define_mappings()
         elseif vim.fn.has("unix") == 1 then
             open_cmd = "xdg-open"
         end
-
-        print(open_cmd)
 
         vim.system({ open_cmd, path }, { detach = true })
     end, { buffer = buf.num, silent = true })
@@ -432,15 +418,18 @@ local function define_autocmds()
                 end
             end
         end,
-        desc = "Refreshes filetee on save"
+        desc = "Refreshes filetree on save",
+        group = augroup_name
     })
 
     vim.api.nvim_create_autocmd("BufWipeout", {
-        buffer = buf.num,
         callback = function()
+            vim.api.nvim_del_augroup_by_name(augroup_name)
             buf.open = false
         end,
-        desc = "Closes file tree on buf close"
+        buffer = buf.num,
+        desc = "Closes file tree on buf close",
+        group = augroup_name
     })
 end
 
@@ -466,7 +455,7 @@ vim.api.nvim_create_user_command("Filetree", function()
     vim.cmd("wincmd H")
     vim.api.nvim_win_set_width(0, 25)
 
-    buf.num = vim.api.nvim_create_buf(true, true)
+    buf.num = vim.api.nvim_create_buf(false, true)
     vim.api.nvim_win_set_buf(0, buf.num)
     vim.api.nvim_set_option_value("bufhidden", "wipe", { buf = 0 })
 
@@ -479,6 +468,8 @@ vim.api.nvim_create_user_command("Filetree", function()
 
     refresh()
     define_mappings()
+
+    vim.api.nvim_create_augroup(augroup_name, { clear = true })
     define_autocmds()
 end, {})
 
