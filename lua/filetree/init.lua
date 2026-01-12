@@ -1,5 +1,5 @@
 local buf = { open = false }
-local show_dots = false
+local show_dots = true
 local current_data
 local augroup_name = "Filetree.nvim"
 

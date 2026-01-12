@@ -1,4 +1,4 @@
--- vim.opt.rtp:prepend("/Users/ammsiss/Projects/filetree.nvim")
+-- vim.opt.rtp:prepend("/home/ammsiss/Projects/filetree.nvim")
 
 require("filetree")
 
