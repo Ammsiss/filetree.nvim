@@ -1,5 +1,6 @@
 local buf = { open = false }
 local show_dots = true
+local hide_gitignore = true
 local current_data
 local augroup_name = "Filetree.nvim"
 
@@ -42,6 +43,40 @@ local function print_to_buffer(output)
     end
 end
 
+local function get_git_info()
+    local obj = vim.system({ "git", "status", "--porcelain", "--ignored" },
+        { text = true }):wait()
+
+    if obj.code ~= 0 then
+        return nil, obj.stderr
+    end
+
+    local obj2 = vim.system({ "git", "rev-parse", "--show-toplevel" },
+        { text = true }):wait()
+
+    if obj2.code ~= 0 then
+        return nil, obj2.stderr
+    end
+
+    local git_root = vim.trim(obj2.stdout)
+
+    local stdout_table = vim.split(obj.stdout, "\n", { trimempty = true })
+
+    local output_map = {}
+    for _, line in ipairs(stdout_table) do
+        if line:match("!!") then
+            local rel_path = line:sub(4)
+            local filename = vim.fs.basename(rel_path)
+
+            if vim.fn.getcwd() .. "/" .. filename == git_root .. "/" .. rel_path then
+                output_map[filename] = "ignored"
+            end
+        end
+    end
+
+    return output_map
+end
+
 local function get_dir_content(dir)
     local scandir = vim.uv.fs_scandir(dir)
     if not scandir then
@@ -60,11 +95,17 @@ local function get_dir_content(dir)
     local output = { lines = {}, header = { text = cwd } }
     local files = {}
 
+    local git_output = get_git_info()
+
     while true do
         local name, type = vim.uv.fs_scandir_next(scandir)
         if not name then break end
 
         if not show_dots and name:sub(1, 1) == "." then
+            goto continue
+        end
+
+        if hide_gitignore and git_output and git_output[name] == "ignored" then
             goto continue
         end
 
@@ -379,6 +420,11 @@ local function define_mappings()
         refresh()
     end, { buffer = buf.num, silent = true })
 
+    vim.keymap.set("n", "I", function()
+        hide_gitignore = not hide_gitignore
+        refresh()
+    end, { buffer = buf.num, silent = true })
+
     vim.keymap.set("n", "s", function()
         local row = vim.api.nvim_win_get_cursor(0)[1] - 1
         if row == 0 then
@@ -473,77 +519,3 @@ vim.api.nvim_create_user_command("Filetree", function()
 end, {})
 
 vim.keymap.set("n", "<leader>ot", ":Filetree<CR>", { noremap = true, silent = true })
-
--- local function add_git_data(output)
---
---     local result = vim.system({ "git", "status", "--porcelain", "--ignored" }, { text = true }):wait()
---     local git_output = vim.split(result.stdout, "\n", { trimempty = true })
---     local git_root = vim.trim(vim.system({ "git", "rev-parse", "--show-toplevel" }, { text = true }):wait().stdout)
---
---     for _, git_line in ipairs(git_output) do
---
---         if git_line:match("fatal") then
---             break
---         end
---
---         local path = git_line:sub(4)
---         local node_path = git_root .. "/" .. path
---         local nodes = vim.split(path, "/")
---
---         for _, line in ipairs(output.lines) do
---
---             -- handle all files and directories at end of node list
---             for _, node in ipairs(nodes) do
---                 -- if line.path == node_path then
---                 --     print("line " .. line.path)
---                 --     print("node " .. node_path)
---                 -- end
---                 if line.path == node_path then
---                     if git_line:match("^ M ") then
---                         line.git_status = "TreeGitModified"
---                     elseif git_line:match("^!! ") then
---                         line.git_status = "TreeGitIgnored"
---                     elseif git_line:match("^%?%? ") then
---                         line.git_status = "TreeGitUntracked"
---                     elseif git_line:match("^A  ") then
---                         line.git_status = "TreeGitAdded"
---                     end
---                 -- handle directories not at end of node list
---                 elseif line.type == "directory" and line.name == node then
---                     if git_line:match("^ M ") then
---                         line.git_status = "TreeGitModified"
---                     end
---                 end
---             end
---         end
---     end
--- end
-
--- if line.git_status ~= nil then
---     vim.hl.range(
---         buf.num, ns, line.git_status,
---         ---@diagnostic disable-next-line: param-type-mismatch
---         { (i + 1) - 1, vim.str_byteindex(line.text, 3, false) },
---         { (i + 1) - 1, -1 }
---     )
--- end
---
--- if ignored then
---     if line.git_status ~= nil then
---         if line.git_status == "TreeGitIgnored" then
---             goto continue
---         end
---     end
--- end
---
---
--- vim.cmd("highlight TreeGitModified guifg=#fabd2f")
--- vim.cmd("highlight TreeGitUntracked guifg=#fb4934")
--- vim.cmd("highlight TreeGitAdded guifg=#b8bb26")
--- vim.cmd("highlight TreeGitIgnored guifg=#5c6370")
---
---
--- vim.keymap.set("n", "I", function()
---     ignored = not ignored
---     refresh()
--- end, { buffer = buf.num, silent = true })
