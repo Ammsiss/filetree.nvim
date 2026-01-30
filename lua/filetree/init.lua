@@ -35,8 +35,8 @@ local function print_to_buffer(output)
         if line.icon ~= nil then
             vim.hl.range(
                 buf.num, ns, line.icon.hl,
-                { (i + 1) - 1, line.icon.start_col - 1 },
-                { (i + 1) - 1, line.icon.start_col - 1 }
+                { (i + 1) - 1, 0 },
+                { (i + 1) - 1, -1 }
             )
         end
 
@@ -486,7 +486,7 @@ vim.api.nvim_create_user_command("Filetree", function()
 
     local gb = require("custom.color").gruvbox
 
-    vim.api.nvim_set_hl(0, "TreeDirectoryIcon", { fg = gb.bright_blue })
+    vim.api.nvim_set_hl(0, "TreeDirectoryIcon", { fg = gb.neutral_blue })
     vim.api.nvim_set_hl(0, "TreeFileLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeDirLinkIcon", { fg = gb.bright_aqua })
     vim.api.nvim_set_hl(0, "TreeBrokenLinkIcon", { fg = gb.bright_red })
