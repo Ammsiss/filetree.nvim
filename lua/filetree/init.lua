@@ -434,14 +434,7 @@ local function define_mappings()
         local line = current_data.lines[row]
         local path = vim.fn.getcwd() .. "/" .. line.name
 
-        local open_cmd
-        if vim.fn.has("macunix") == 1 then
-            open_cmd = "open"
-        elseif vim.fn.has("unix") == 1 then
-            open_cmd = "xdg-open"
-        end
-
-        vim.system({ open_cmd, path }, { detach = true })
+        vim.ui.open(path)
     end, { buffer = buf.num, silent = true })
 end
 
